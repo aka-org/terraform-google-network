@@ -55,12 +55,6 @@ module "network" {
 | network_name          | Name of the VPC network.                                  | string         | 'main'                                       |
 | subnetworks           | List of subnetwork resources to be created.                | list(object)   | []                                          |
 | firewall_rules        | List of firewall rule resources to be created.                | list(object) | []                                           |
-## Inputs
-
-- `` (string): 
-- `` (string, default "main"): 
-- `` (list of objects): 
-- `` (list of objects): Each object must have `name`, `protocol`, `ports` (list), `source_ranges` (list), and `tags` (list).
 
 ---
 
