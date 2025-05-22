@@ -92,7 +92,6 @@ The service account running Terraform must have at least:
 - `roles/compute.networkAdmin` (for VPC, subnet, and firewall management)
 - `roles/compute.securityAdmin` (for firewall rules)
 - `roles/compute.viewer` (for reading network resources)
-- `roles/resourcemanager.projectIamAdmin` (if managing IAM, not strictly needed for just network resources)
 
 ---
 
