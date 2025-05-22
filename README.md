@@ -12,7 +12,6 @@ This module provisions a Google Cloud VPC network, subnets, and firewall rules. 
 - [Module Variables](#module-variables)
 - [Outputs](#outputs)
 - [APIs and Service Account Prerequisites](#apis-and-service-account-prerequisites)
-- [Service Account Roles](#service-account-roles)
 - [Changelog](#changelog)
 - [License](#license)
 
@@ -35,7 +34,7 @@ This module provisions a Google Cloud VPC network, subnets, and firewall rules. 
 module "network" {
   source  = "aka-org/network/google"
   version = "0.1.0"
-  
+
   project_id    = var.project_id
   network_name  = "main"
   subnetworks   = [
