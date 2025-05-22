@@ -18,6 +18,7 @@ variable "firewall_rules" {
     source_ranges = list(string)
     tags          = list(string)
   }))
+  default = []
 }
 
 variable "subnetworks" {
@@ -27,4 +28,5 @@ variable "subnetworks" {
     region        = string
     ip_cidr_range = string
   }))
+  default = []
 }
