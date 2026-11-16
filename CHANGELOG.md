@@ -11,7 +11,7 @@ Every addition is optional; a caller written for 0.1.0 plans the same resources 
 - `firewall_rules`: `action` (`allow` / `deny`), `priority`, `source_tags`.
 - `nat_gateways`: Cloud NAT gateways, each with its Cloud Router; outputs `routers` and `nat_gateways`.
 - Every submodule declares the provider it uses.
-- CI: `terraform fmt`, `validate` on the lowest and newest supported provider, TFLint.
+- CI: `terraform fmt`, `validate` on the lowest and newest supported provider, TFLint, and a check that the README's Inputs and Outputs tables match the code (generated with terraform-docs).
 - README: the fields of each list variable, and "Development".
 
 ## 0.1.0
