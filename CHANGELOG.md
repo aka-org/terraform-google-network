@@ -1,6 +1,12 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## Unreleased
+### ADDED
+- Tests (`tests/`, `terraform test`) that plan and apply the module against mocked providers; CI runs them on the lowest and newest supported Google provider.
+- CI also runs weekly, and lints with TFLint's Google ruleset.
+- Releases are made by CI from the changelog's newest version (`.github/workflows/release.yml`).
+
 ## 0.2.0
 Every addition is optional; a caller written for 0.1.0 plans the same resources with the same values.
 ### CHANGED
