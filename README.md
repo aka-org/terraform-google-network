@@ -9,8 +9,7 @@ This module provisions a Google Cloud VPC network, subnets (with secondary range
 ## Table of Contents
 - [Requirements](#requirements)
 - [Usage](#usage)
-- [Module Variables](#module-variables)
-- [Outputs](#outputs)
+- [Inputs and outputs](#inputs-and-outputs)
 - [APIs and Service Account Prerequisites](#apis-and-service-account-prerequisites)
 - [Development](#development)
 - [Changelog](#changelog)
@@ -89,15 +88,34 @@ module "network" {
 
 ---
 
-## Module Variables
+## Inputs and outputs
 
-| Name                  | Description                                                                 | Type           | Default                                      |
-|-----------------------|-----------------------------------------------------------------------------|----------------|----------------------------------------------|
-| project_id            | The GCP project ID.                                       | string         | n/a (required)                               |
-| network_name          | Name of the VPC network.                                  | string         | 'main'                                       |
-| subnetworks           | List of subnetwork resources to be created.                | list(object)   | []                                          |
-| firewall_rules        | List of firewall rule resources to be created.                | list(object) | []                                           |
-| nat_gateways          | List of Cloud NAT gateways to be created, each with its own Cloud Router. | list(object) | []                               |
+<!-- BEGIN_TF_DOCS -->
+## Inputs
+
+| Name | Description | Type | Default | Required |
+| ---- | ----------- | ---- | ------- | :------: |
+| project\_id | The id of the host project | `string` | n/a | yes |
+| firewall\_rules | List of firewall rule resources to be created | <pre>list(object({<br/>    name     = string<br/>    protocol = string<br/>    # Ignored for protocols without ports (icmp, esp, ah, sctp, ipip, all).<br/>    ports = optional(list(string), [])<br/>    # Where the traffic comes from: address ranges, or instances carrying<br/>    # one of the source tags (at least one of the two).<br/>    source_ranges = optional(list(string))<br/>    source_tags   = optional(list(string))<br/>    # The instances the rule applies to; unset applies it to every<br/>    # instance in the network.<br/>    tags = optional(list(string))<br/>    # "allow" or "deny".<br/>    action = optional(string, "allow")<br/>    # 0 (first) to 65535; unset leaves the provider's default (1000).<br/>    priority = optional(number)<br/>  }))</pre> | `[]` | no |
+| nat\_gateways | List of Cloud NAT gateways to be created, each with its own Cloud Router | <pre>list(object({<br/>    name   = string<br/>    region = string<br/>    # The Cloud Router the gateway hangs on; unset names it "<name>-router".<br/>    router_name = optional(string)<br/>    # The subnets served: unset serves every subnet of the region, with<br/>    # all its ranges (secondary ones included, so GKE pods too); else the<br/>    # names of subnets created by this module.<br/>    subnetworks = optional(list(string))<br/>    # Ports reserved per VM; unset leaves the provider's default.<br/>    min_ports_per_vm = optional(number)<br/>    # Logs translation errors to Cloud Logging.<br/>    log_errors = optional(bool, false)<br/>  }))</pre> | `[]` | no |
+| network\_name | The name of the vpc network | `string` | `"main"` | no |
+| subnetworks | List of subnetwork resources to be created | <pre>list(object({<br/>    name          = string<br/>    region        = string<br/>    ip_cidr_range = string<br/>    # Named secondary ranges (GKE's pods and services ranges).<br/>    secondary_ip_ranges = optional(list(object({<br/>      range_name    = string<br/>      ip_cidr_range = string<br/>    })), [])<br/>    # Lets VMs without an external address reach Google APIs. Unset<br/>    # leaves the provider's default (off).<br/>    private_ip_google_access = optional(bool)<br/>  }))</pre> | `[]` | no |
+
+## Outputs
+
+| Name | Description |
+| ---- | ----------- |
+| firewall\_rules | The created firewall rule resources |
+| nat\_gateways | The created Cloud NAT gateway resources |
+| network\_name | Name of the vpc network |
+| network\_self\_link | Self link to the vpc network |
+| routers | The created Cloud Router resources |
+| subnetworks | The created subnetwork resources |
+<!-- END_TF_DOCS -->
+
+---
+
+## Fields of the list variables
 
 ### `subnetworks` fields
 
@@ -139,17 +157,6 @@ A gateway gives VMs without an external address outbound internet access, from a
 
 ---
 
-## Outputs
-
-- `network_name`: Name of the VPC.
-- `network_self_link`: Self-link of the VPC.
-- `subnetworks`: The created subnet resources.
-- `firewall_rules`: The created firewall rule resources.
-- `routers`: The created Cloud Router resources.
-- `nat_gateways`: The created Cloud NAT gateway resources.
-
----
-
 ## APIs and Service Account Prerequisites
 
 To apply this module, the following are required:
@@ -171,6 +178,7 @@ What a machine needs to work on this module:
 |---|---|---|
 | [Terraform](https://developer.hashicorp.com/terraform/install) | >= 1.11.4 | `fmt`, `validate` |
 | [TFLint](https://github.com/terraform-linters/tflint) | >= 0.50 | lint (`.tflint.hcl`) |
+| [terraform-docs](https://terraform-docs.io/user-guide/installation/) | >= 0.25 | the README's Inputs and Outputs tables (`.terraform-docs.yml`) |
 | git | any | |
 
 Nothing here needs Google Cloud credentials: `validate` and `tflint` read only the configuration.
@@ -181,7 +189,10 @@ The checks CI runs (`.github/workflows/ci.yml`), from the repository root:
 terraform fmt -check -recursive -diff
 terraform init -backend=false && terraform validate
 tflint --init && tflint --recursive
+terraform-docs --output-check .
 ```
+
+After changing a variable or an output, run `terraform-docs .` to rewrite the README's tables.
 
 CI validates twice: on the lowest supported Google provider (6.8.0) and on the newest release the constraint allows. To validate on the lowest locally, change the `google` constraint in every `versions.tf` to `6.8.0`, run `terraform init -backend=false -upgrade && terraform validate`, and revert.
 
