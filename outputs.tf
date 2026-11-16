@@ -17,3 +17,13 @@ output "subnetworks" {
   description = "The created subnetwork resources"
   value       = module.subnets.subnetworks
 }
+
+output "routers" {
+  description = "The created Cloud Router resources"
+  value       = module.nat.routers
+}
+
+output "nat_gateways" {
+  description = "The created Cloud NAT gateway resources"
+  value       = module.nat.nat_gateways
+}
