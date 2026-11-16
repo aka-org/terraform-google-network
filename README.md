@@ -2,7 +2,7 @@
 
 ## Overview
 
-This module provisions a Google Cloud VPC network, subnets, and firewall rules. It is designed to be used after creating a GCP project and enabling required APIs/service accounts (such as with the [terraform-google-project](https://github.com/aka-org/terraform-google-project) module).
+This module provisions a Google Cloud VPC network, subnets (with secondary ranges), firewall rules, and Cloud NAT gateways. It is designed to be used after creating a GCP project and enabling required APIs/service accounts (such as with the [terraform-google-project](https://github.com/aka-org/terraform-google-project) module).
 
 ---
 
@@ -12,6 +12,7 @@ This module provisions a Google Cloud VPC network, subnets, and firewall rules. 
 - [Module Variables](#module-variables)
 - [Outputs](#outputs)
 - [APIs and Service Account Prerequisites](#apis-and-service-account-prerequisites)
+- [Development](#development)
 - [Changelog](#changelog)
 - [License](#license)
 
@@ -20,7 +21,7 @@ This module provisions a Google Cloud VPC network, subnets, and firewall rules. 
 ## Requirements
 
 - **Terraform**: >= 1.11.4
-- **Provider**: hashicorp/google version 6.8.0
+- **Provider**: hashicorp/google >= 6.8, < 8 (checked on 6.8.0 and the latest 7.x)
 - **Prerequisites**:
   - A GCP project must already exist.
   - Required APIs must be enabled (Compute Engine API at minimum).
@@ -33,7 +34,7 @@ This module provisions a Google Cloud VPC network, subnets, and firewall rules. 
 ```
 module "network" {
   source  = "aka-org/network/google"
-  version = "0.1.0"
+  version = "0.2.0"
 
   project_id    = var.project_id
   network_name  = "main"
@@ -42,6 +43,17 @@ module "network" {
       name          = "subnet-1"
       region        = "us-central1"
       ip_cidr_range = "10.0.1.0/24"
+    },
+    {
+      # A subnet for a VPC-native GKE cluster with private nodes
+      name                     = "gke"
+      region                   = "europe-west1"
+      ip_cidr_range            = "10.10.0.0/20"
+      private_ip_google_access = true
+      secondary_ip_ranges = [
+        { range_name = "pods", ip_cidr_range = "10.20.0.0/16" },
+        { range_name = "services", ip_cidr_range = "10.30.0.0/20" },
+      ]
     },
     # ... more subnets ...
   ]
@@ -53,7 +65,24 @@ module "network" {
       source_ranges = ["0.0.0.0/0"]
       tags          = ["ssh"]
     },
+    {
+      name        = "web-to-api"
+      protocol    = "tcp"
+      ports       = ["8080"]
+      source_tags = ["web"]
+      tags        = ["api"]
+    },
+    {
+      name          = "deny-everything-else"
+      protocol      = "all"
+      action        = "deny"
+      priority      = 65000
+      source_ranges = ["0.0.0.0/0"]
+    },
     # ... more rules ...
+  ]
+  nat_gateways = [
+    { name = "nat", region = "europe-west1" },
   ]
 }
 ```
@@ -68,6 +97,45 @@ module "network" {
 | network_name          | Name of the VPC network.                                  | string         | 'main'                                       |
 | subnetworks           | List of subnetwork resources to be created.                | list(object)   | []                                          |
 | firewall_rules        | List of firewall rule resources to be created.                | list(object) | []                                           |
+| nat_gateways          | List of Cloud NAT gateways to be created, each with its own Cloud Router. | list(object) | []                               |
+
+### `subnetworks` fields
+
+| Field | Description | Type | Default |
+|---|---|---|---|
+| name | Name of the subnet; also its key in the `subnetworks` output, so names must be unique across regions. | string | required |
+| region | Region of the subnet. | string | required |
+| ip_cidr_range | Primary range. | string | required |
+| secondary_ip_ranges | Named secondary ranges, each `{ range_name, ip_cidr_range }` (a GKE cluster's pods and services). | list(object) | `[]` |
+| private_ip_google_access | Lets VMs without an external address reach Google APIs. | bool | unset (off) |
+
+### `firewall_rules` fields
+
+| Field | Description | Type | Default |
+|---|---|---|---|
+| name | Name of the rule. | string | required |
+| protocol | `tcp`, `udp`, `icmp`, `esp`, `ah`, `sctp`, `ipip` or `all`. | string | required |
+| ports | Ports or ranges; ignored for protocols without ports. | list(string) | `[]` |
+| source_ranges | Source address ranges. | list(string) | unset |
+| source_tags | Source instances, by network tag. Give `source_ranges`, `source_tags` or both. | list(string) | unset |
+| tags | The instances the rule applies to, by network tag; unset applies it to every instance. | list(string) | unset |
+| action | `allow` or `deny`. | string | `allow` |
+| priority | 0 (evaluated first) to 65535. | number | unset (1000) |
+
+Rules are ingress rules.
+
+### `nat_gateways` fields
+
+| Field | Description | Type | Default |
+|---|---|---|---|
+| name | Name of the gateway. | string | required |
+| region | Region of the gateway and its router. | string | required |
+| router_name | Name of the Cloud Router created for it. | string | `<name>-router` |
+| subnetworks | Names of subnets of this module to serve (all their ranges); unset serves every subnet of the region. | list(string) | unset |
+| min_ports_per_vm | Ports reserved per VM. | number | unset (provider default) |
+| log_errors | Log translation errors to Cloud Logging. | bool | `false` |
+
+A gateway gives VMs without an external address outbound internet access, from addresses Google allocates.
 
 ---
 
@@ -77,6 +145,8 @@ module "network" {
 - `network_self_link`: Self-link of the VPC.
 - `subnetworks`: The created subnet resources.
 - `firewall_rules`: The created firewall rule resources.
+- `routers`: The created Cloud Router resources.
+- `nat_gateways`: The created Cloud NAT gateway resources.
 
 ---
 
@@ -89,9 +159,35 @@ To apply this module, the following are required:
 
 ### Service Account Roles
 The service account running Terraform must have at least:
-- `roles/compute.networkAdmin` (for VPC, subnet, and firewall management)
+- `roles/compute.networkAdmin` (for VPC, subnet, router, NAT and firewall management)
 - `roles/compute.securityAdmin` (for firewall rules)
 - `roles/compute.viewer` (for reading network resources)
+
+## Development
+
+What a machine needs to work on this module:
+
+| Tool | Version | Used for |
+|---|---|---|
+| [Terraform](https://developer.hashicorp.com/terraform/install) | >= 1.11.4 | `fmt`, `validate` |
+| [TFLint](https://github.com/terraform-linters/tflint) | >= 0.50 | lint (`.tflint.hcl`) |
+| git | any | |
+
+Nothing here needs Google Cloud credentials: `validate` and `tflint` read only the configuration.
+
+The checks CI runs (`.github/workflows/ci.yml`), from the repository root:
+
+```sh
+terraform fmt -check -recursive -diff
+terraform init -backend=false && terraform validate
+tflint --init && tflint --recursive
+```
+
+CI validates twice: on the lowest supported Google provider (6.8.0) and on the newest release the constraint allows. To validate on the lowest locally, change the `google` constraint in every `versions.tf` to `6.8.0`, run `terraform init -backend=false -upgrade && terraform validate`, and revert.
+
+An untracked `testing/` directory is ignored by git, for a caller configuration and its `terraform.tfvars` when trying the module against a real project. `terraform fmt -recursive` and `tflint --recursive` walk into it.
+
+Releasing: add the version's section to `CHANGELOG.md`, merge, tag `vX.Y.Z` on `main`. The Terraform Registry publishes the tag.
 
 ---
 
